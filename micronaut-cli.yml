@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: com.example
+testFramework: junit
+sourceLanguage: java
+buildTool: gradle_kotlin
+features: [app-name, awaitility, cache-caffeine, data, data-mongodb, graalvm, gradle, hamcrest, http-client, http-session, java, java-application, junit, junit-params, logback, lombok, micronaut-aop, micronaut-aot, micronaut-build, micronaut-http-validation, mockito, mongo-sync, netty-server, object-storage-local, reactor, reactor-http-client, readme, retry, serialization-bson, shade, static-resources, test-resources, validation, websocket, yaml, yaml-build]
