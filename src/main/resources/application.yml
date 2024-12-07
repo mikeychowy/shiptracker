@@ -9,6 +9,9 @@ micronaut:
     services:
       teqplay:
         url: https://backenddev.teqplay.nl
+  executors:
+    blocking:
+      virtual: true
 
 teqplay:
   username: chowmichaelworkmail@gmail.com
