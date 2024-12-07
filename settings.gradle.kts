@@ -1,2 +1,1 @@
-rootProject.name="shiptracker"
-
+rootProject.name = "shiptracker"

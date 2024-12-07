@@ -5,3 +5,11 @@ micronaut:
     http:
       cookie: true
       header: true
+  http:
+    services:
+      teqplay:
+        url: https://backenddev.teqplay.nl
+
+teqplay:
+  username: chowmichaelworkmail@gmail.com
+  password: yZ6zEdu%jiQFd

@@ -3,6 +3,7 @@ plugins {
     id("io.micronaut.application") version "4.4.4"
     id("io.micronaut.test-resources") version "4.4.4"
     id("io.micronaut.aot") version "4.4.4"
+    id("com.diffplug.spotless") version "6.25.0"
 }
 
 version = "0.1"
@@ -11,6 +12,8 @@ group = "com.example"
 repositories {
     mavenCentral()
 }
+
+val awaitilityVersion = "4.2.2"
 
 dependencies {
     annotationProcessor("org.projectlombok:lombok")
@@ -37,21 +40,19 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.mongodb:mongodb-driver-sync")
     runtimeOnly("org.yaml:snakeyaml")
-    testImplementation("org.awaitility:awaitility:4.2.2")
+    testImplementation("org.awaitility:awaitility:$awaitilityVersion")
     testImplementation("org.hamcrest:hamcrest")
     testImplementation("org.junit.jupiter:junit-jupiter-params")
     testImplementation("org.mockito:mockito-core")
 }
 
-
 application {
     mainClass = "com.example.Application"
 }
 java {
-    sourceCompatibility = JavaVersion.toVersion("21")
-    targetCompatibility = JavaVersion.toVersion("21")
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
-
 
 graalvmNative.toolchainDetection = false
 
@@ -76,9 +77,23 @@ micronaut {
     }
 }
 
+spotless {
+    kotlin {
+        target("**/*.kt")
+        ktlint() // has its own section below
+    }
+    kotlinGradle {
+        target("*.gradle.kts")
+        ktlint()
+    }
+    java {
+        importOrder()
+        removeUnusedImports("cleanthat-javaparser-unnecessaryimport")
+        palantirJavaFormat("2.50.0").style("GOOGLE").formatJavadoc(true)
+        formatAnnotations()
+    }
+}
 
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
 }
-
-
