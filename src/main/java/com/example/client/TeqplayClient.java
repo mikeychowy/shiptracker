@@ -25,7 +25,9 @@ public final class TeqplayClient {
 
   @Inject
   public TeqplayClient(
-      @Client("teqplay") HttpClient httpClient, DefaultSyncCache cache, TeqplayConfiguration teqplayConfiguration) {
+      @Client("teqplay") HttpClient httpClient,
+      DefaultSyncCache cache,
+      TeqplayConfiguration teqplayConfiguration) {
     this.httpClient = httpClient;
     this.cache = cache;
     this.teqplayConfiguration = teqplayConfiguration;
@@ -34,16 +36,21 @@ public final class TeqplayClient {
   @ExecuteOn(TaskExecutors.VIRTUAL)
   public String login() {
     // get from cache first
-    return cache.get(TOKEN_CACHE_KEY, String.class)
+    return cache
+        .get(TOKEN_CACHE_KEY, String.class)
         // if not exists, then we get a new token
         .orElseGet(() -> {
           HttpRequest<TeqplayLoginRequest> request = HttpRequest.POST(
                   "/auth/login",
-                  new TeqplayLoginRequest(teqplayConfiguration.username(), teqplayConfiguration.password()))
+                  new TeqplayLoginRequest(
+                      teqplayConfiguration.username(), teqplayConfiguration.password()))
               .accept(MediaType.APPLICATION_JSON)
               .contentType(MediaType.APPLICATION_JSON);
           // since we execute this in a virtual thread anyway, let's just use blocking client
-          var token = httpClient.toBlocking().retrieve(request, TeqplayLoginResponse.class).token();
+          var token = httpClient
+              .toBlocking()
+              .retrieve(request, TeqplayLoginResponse.class)
+              .token();
           cache.put(TOKEN_CACHE_KEY, token);
           return token;
         });
