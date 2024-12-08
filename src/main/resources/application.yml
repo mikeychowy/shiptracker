@@ -1,6 +1,8 @@
 micronaut:
   application:
     name: shiptracker
+  jcache:
+    enabled: false
   caches:
     teqplay:
       listen-to-evictions: true
