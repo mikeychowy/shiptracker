@@ -1,6 +1,11 @@
 micronaut:
   application:
     name: shiptracker
+  caches:
+    teqplay:
+      listen-to-evictions: true
+      listen-to-removals: true
+      maximum-size: 1
   session:
     http:
       cookie: true
@@ -8,7 +13,7 @@ micronaut:
   http:
     services:
       teqplay:
-        url: https://backenddev.teqplay.nl
+        url:
   executors:
     blocking:
       virtual: true

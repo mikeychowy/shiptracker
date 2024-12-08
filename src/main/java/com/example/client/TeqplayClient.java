@@ -1,23 +1,32 @@
 package com.example.client;
 
 import com.example.config.TeqplayConfiguration;
-import com.example.dto.response.TeqplayLoginResponse;
-import io.micronaut.core.annotation.Blocking;
-import io.micronaut.core.async.annotation.SingleResult;
-import io.micronaut.http.annotation.Post;
+import io.micronaut.cache.annotation.CacheConfig;
+import io.micronaut.cache.annotation.Cacheable;
+import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
-import io.micronaut.retry.annotation.Retryable;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
-@Client(id = TeqplayConfiguration.TEQPLAY_PREFIX)
-@Retryable
-public interface TeqplayClient {
+@Singleton
+@CacheConfig("teqplay")
+public final class TeqplayClient {
+  private final HttpClient httpClient;
+  private final TeqplayConfiguration teqplayConfiguration;
 
-  @Post("/auth/login")
+  @Inject
+  public TeqplayClient(
+      @Client("teqplay") HttpClient httpClient, TeqplayConfiguration teqplayConfiguration) {
+    this.httpClient = httpClient;
+    this.teqplayConfiguration = teqplayConfiguration;
+  }
+
   @ExecuteOn(TaskExecutors.VIRTUAL)
-  @Blocking
-  @SingleResult
-  TeqplayLoginResponse login(@NotBlank String username, @NotBlank String password);
+  @Cacheable
+  public void login() {
+    // since we execute this in a virtual thread anyway, let's just block
+    var blockingClient = httpClient.toBlocking();
+  }
 }
