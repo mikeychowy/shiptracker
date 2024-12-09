@@ -12,5 +12,4 @@ db.createUser({
 });
 
 db.createCollection("ships_latest_data");
-db.createCollection("port_entry_events");
-db.createCollection("port_exit_events");
+db.createCollection("port_events");

@@ -20,6 +20,10 @@ micronaut:
     blocking:
       virtual: true
 
+mongodb:
+  uri: mongodb://root:password@localhost:27017/teqplay
+
+
 teqplay:
   username: chowmichaelworkmail@gmail.com
   password: yZ6zEdu%jiQFd

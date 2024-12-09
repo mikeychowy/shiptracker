@@ -14,6 +14,9 @@ repositories {
 }
 
 val awaitilityVersion = "4.2.2"
+val commonsLangVersion = "3.17.0"
+val commonsIOVersion = "2.18.0"
+val jtsVersion = "1.20.0"
 
 dependencies {
     annotationProcessor("org.projectlombok:lombok")
@@ -36,6 +39,9 @@ dependencies {
     implementation("io.micronaut.session:micronaut-session")
     implementation("io.micronaut.validation:micronaut-validation")
     implementation("jakarta.validation:jakarta.validation-api")
+    implementation("org.apache.commons:commons-lang3:$commonsLangVersion")
+    implementation("commons-io:commons-io:$commonsIOVersion")
+    implementation("org.locationtech.jts:jts-core:$jtsVersion")
     compileOnly("org.projectlombok:lombok")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.mongodb:mongodb-driver-sync")

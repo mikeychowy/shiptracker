@@ -4,12 +4,13 @@ import io.micronaut.runtime.Micronaut;
 
 public class Application {
 
-  // call the ships data every 1 minute
+  // call the ship data every 1 minute
   // save the response into temporary json file
-  // trigger a job in virtual thread
-  // inside the job:
+  // trigger a service in virtual thread
+  // inside the service:
+  // parse the json file
   // for each of the items
-  // find from the DB based on the ship's mmsi ID
+  // find from the DB based on the ship's mmsi IDs
   // if found, use geospatial lib to check if the ship was outside or inside polygon
   // compare the current data, determine if an entry/exit event occurred
   // event checking logic:
