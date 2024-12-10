@@ -1,25 +1,28 @@
 package com.example.entity;
 
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.data.annotation.GeneratedValue;
 import io.micronaut.data.annotation.Id;
 import io.micronaut.data.annotation.MappedEntity;
 import io.micronaut.data.annotation.Relation;
 import io.micronaut.data.annotation.Version;
-import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.experimental.Accessors;
 import org.bson.types.ObjectId;
 
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Accessors(chain = true)
 @MappedEntity("ships_latest_data")
 public class ShipEntity {
 
@@ -39,7 +42,7 @@ public class ShipEntity {
 
   @Nullable private Map<String, Object> extras;
 
-  private String callSign;
+  @Nullable private String callSign;
 
   @Nullable private String imoNumber;
 
@@ -49,24 +52,17 @@ public class ShipEntity {
 
   @Nullable private String trueDestination;
 
-  @Nullable private Location location;
+  @Nullable private LocationPart location;
 
   @Nullable private Integer coms;
 
   @Nullable private String status;
 
-  private boolean isInPort = false;
+  private Boolean isInPort;
 
   @Version
   private Long version;
 
   @Relation(value = Relation.Kind.ONE_TO_MANY, mappedBy = "ship")
   @Nullable private List<PortEventEntity> portEvents;
-
-  @Data
-  public static class Location {
-    @Nullable private List<Double> coordinates;
-
-    @Nullable private String type;
-  }
 }

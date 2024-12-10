@@ -1,13 +1,15 @@
 package com.example.dto.response;
 
-import jakarta.annotation.Nullable;
-import java.util.List;
+import com.example.entity.LocationPart;
+import io.micronaut.core.annotation.Nullable;
 import java.util.Map;
 import lombok.Data;
 
 @Data
 public final class TeqplayShipResponse {
+
   private String mmsi;
+
   private Long timeLastUpdate;
 
   @Nullable private Double courseOverGround;
@@ -28,16 +30,9 @@ public final class TeqplayShipResponse {
 
   @Nullable private String trueDestination;
 
-  @Nullable private Location location;
+  @Nullable private LocationPart location;
 
   @Nullable private Integer coms;
 
   @Nullable private String status;
-
-  @Data
-  public static class Location {
-    @Nullable private List<Double> coordinates;
-
-    @Nullable private String type;
-  }
 }

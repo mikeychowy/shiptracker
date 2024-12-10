@@ -9,11 +9,13 @@ import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -23,11 +25,16 @@ public final class ShipDataPollingJob {
 
   private final TeqplayClient teqplayClient;
   private final ShipDataService shipDataService;
+  private final ExecutorService virtualThreadPerTaskExecutor;
 
   @Inject
-  public ShipDataPollingJob(TeqplayClient teqplayClient, ShipDataService shipDataService) {
+  public ShipDataPollingJob(
+      TeqplayClient teqplayClient,
+      ShipDataService shipDataService,
+      @Named("virtualThreadPerTaskExecutorService") ExecutorService virtualThreadPerTaskExecutor) {
     this.teqplayClient = teqplayClient;
     this.shipDataService = shipDataService;
+    this.virtualThreadPerTaskExecutor = virtualThreadPerTaskExecutor;
   }
 
   @Scheduled(initialDelay = "10s", fixedRate = "1m")
@@ -45,6 +52,6 @@ public final class ShipDataPollingJob {
     }
 
     // let the service handle the parsing in another virtual thread
-    shipDataService.handlePollingData(tmpJsonFile);
+    virtualThreadPerTaskExecutor.submit(() -> shipDataService.handlePollingData(tmpJsonFile));
   }
 }
