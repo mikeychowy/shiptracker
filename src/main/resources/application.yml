@@ -15,13 +15,22 @@ micronaut:
   http:
     services:
       teqplay:
-        url:
+        url: https://backenddev.teqplay.nl
+        read-timeout: 20m
+        thread-factory: reactor.core.scheduler.VirtualThreadFactory
+        connect-timeout: 15s
+        allow-block-event-loop: true
+        exception-on-error-status: true
+        log-level: off
+        max-content-length: 120000000
   executors:
     blocking:
       virtual: true
 
 mongodb:
-  uri: mongodb://root:password@localhost:27017/teqplay
+  package-names:
+    - com.example.entity
+  uri: mongodb://user:password@localhost:27017/teqplay
 
 
 teqplay:

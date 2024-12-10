@@ -37,7 +37,7 @@ public final class ShipDataPollingJob {
     this.virtualThreadPerTaskExecutor = virtualThreadPerTaskExecutor;
   }
 
-  @Scheduled(initialDelay = "10s", fixedRate = "1m")
+  @Scheduled(initialDelay = "10s", fixedDelay = "1m")
   @ExecuteOn(TaskExecutors.SCHEDULED)
   public void execute() {
     // create a temporary json file
@@ -45,8 +45,7 @@ public final class ShipDataPollingJob {
     try (FileOutputStream fos = new FileOutputStream(tmpJsonFile);
         ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
       // write the byte array to the file
-      teqplayClient.retrieveLatestShipDataAndStreamToOutput(bos);
-      bos.writeTo(fos);
+      teqplayClient.retrieveLatestShipDataAndStreamToOutput(fos);
     } catch (IOException e) {
       throw new BusinessException(e);
     }

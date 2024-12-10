@@ -54,6 +54,7 @@ public final class ShipDataService {
   }
 
   public void handlePollingData(@Nonnull File tmpJsonFile) {
+    log.info("start handling polling ship data");
     // ahead of read checks
     if (!tmpJsonFile.exists() || !tmpJsonFile.canRead()) {
       throw new BusinessException("File not found or readable: " + tmpJsonFile.getAbsolutePath());
@@ -61,7 +62,8 @@ public final class ShipDataService {
 
     try (FileInputStream stream = new FileInputStream(tmpJsonFile)) {
       var shipDataList =
-          objectMapper.readValue(stream, Argument.listOf(TeqplayShipResponse.class)).stream()
+          objectMapper.readValue(stream, Argument.listOf(TeqplayShipResponse.class))
+              .stream()
               .filter(Objects::nonNull)
               .filter(response -> StringUtils.isNotBlank(response.getMmsi()))
               .toList();
@@ -90,6 +92,7 @@ public final class ShipDataService {
     // Threads
     // that's why we do it manually
     virtualThreadPerTaskExecutor.submit(() -> {
+      log.info("start processing ship entry/exit port event");
       // we need this to flag whether the ship is inside port or not when creating new data in DB
       var isResponseInsidePolygon = checkIfLocationInsidePort(teqplayShipResponse.getLocation());
 
@@ -152,7 +155,7 @@ public final class ShipDataService {
       Boolean isResponseInsidePolygon,
       ShipEntity shipEntity,
       TeqplayShipResponse teqplayShipResponse) {
-
+    log.info("start processing port event logic");
     if (Boolean.TRUE.equals(isShipInsidePolygon) && Boolean.FALSE.equals(isResponseInsidePolygon)) {
       // EXIT EVENT
       var portEvent = PortEventEntity.builder()

@@ -11,12 +11,14 @@ import io.micronaut.http.HttpRequest;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
+import io.micronaut.reactor.http.client.ReactorHttpClient;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import jakarta.annotation.Nonnull;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -31,7 +33,7 @@ public final class TeqplayClient {
 
   @Inject
   public TeqplayClient(
-      @Client("teqplay") HttpClient httpClient,
+      @Client("teqplay") ReactorHttpClient httpClient,
       DefaultSyncCache cache,
       TeqplayConfiguration teqplayConfiguration) {
     this.httpClient = httpClient;
@@ -65,17 +67,22 @@ public final class TeqplayClient {
   }
 
   @ExecuteOn(TaskExecutors.VIRTUAL)
-  public void retrieveLatestShipDataAndStreamToOutput(@Nonnull ByteArrayOutputStream outputStream) {
+  public void retrieveLatestShipDataAndStreamToOutput(@Nonnull OutputStream outputStream) {
     var token = getToken();
     HttpRequest<?> request = HttpRequest.GET("/ship")
         .header(HttpHeaders.AUTHORIZATION, token)
         .accept(MediaType.APPLICATION_JSON);
     log.info("Retrieving latest ship data");
     log.info("Authorization Token: {}", token);
+    
     var bytes = httpClient.toBlocking().retrieve(request, byte[].class);
     if (bytes == null || bytes.length == 0) {
       throw new BusinessException("No ship data was retrieved");
     }
-    outputStream.writeBytes(bytes);
+    try {
+      outputStream.write(bytes);
+    } catch (IOException e) {
+      throw new BusinessException(e);
+    }
   }
 }
