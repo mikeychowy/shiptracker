@@ -27,12 +27,17 @@ micronaut:
     blocking:
       virtual: true
 
+
 mongodb:
   package-names:
     - com.example.entity
-  uri: mongodb://user:password@localhost:27017/teqplay
+  uri: mongodb://root:password@localhost:27017/?directConnection=true
 
 
 teqplay:
   username: chowmichaelworkmail@gmail.com
   password: yZ6zEdu%jiQFd
+jackson:
+  module-scan: true
+  property-naming-strategy: LOWER_CAMEL_CASE
+  trim-strings: true

@@ -8,9 +8,11 @@ import com.example.entity.ShipEntity;
 import com.example.exception.BusinessException;
 import com.example.repository.PortEventRepository;
 import com.example.repository.ShipRepository;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.core.annotation.Nullable;
-import io.micronaut.core.type.Argument;
-import io.micronaut.serde.ObjectMapper;
 import jakarta.annotation.Nonnull;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -20,10 +22,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.locationtech.jts.geom.Coordinate;
@@ -32,6 +36,7 @@ import org.locationtech.jts.geom.Polygon;
 
 @Slf4j
 @Singleton
+@Requires(beans = {ShipRepository.class, PortEventRepository.class})
 public final class ShipDataService {
   private final ShipRepository shipRepository;
   private final PortEventRepository portEventRepository;
@@ -60,23 +65,54 @@ public final class ShipDataService {
       throw new BusinessException("File not found or readable: " + tmpJsonFile.getAbsolutePath());
     }
 
-    try (FileInputStream stream = new FileInputStream(tmpJsonFile)) {
-      var shipDataList =
-          objectMapper.readValue(stream, Argument.listOf(TeqplayShipResponse.class))
-              .stream()
-              .filter(Objects::nonNull)
-              .filter(response -> StringUtils.isNotBlank(response.getMmsi()))
-              .toList();
-
-      if (shipDataList.isEmpty()) {
-        log.info("No ship data to be processed");
-        return;
+    try (FileInputStream stream = new FileInputStream(tmpJsonFile);
+        JsonParser jsonParser = objectMapper.getFactory().createParser(stream)) {
+      if (!jsonParser.nextToken().equals(JsonToken.START_ARRAY)) {
+        throw new BusinessException("Unexpected token: " + jsonParser.getCurrentToken());
       }
 
-      shipDataList.forEach(this::processResponse);
+      // atomic counter for, well, counting, consume around 2000 data
+      AtomicInteger counter = new AtomicInteger(0);
+      // initial holder
+      List<TeqplayShipResponse> responseList = new ArrayList<>();
+
+      // this is just to simulate a more sophisticated queue system like Kafka or NATS.IO
+      // since this doesn't have backpressure, retry, indexing/offsets
+      // but the JSON is BIG (like my appetite 😋), so we need to use Jackson's streaming API
+      // well, this makes it a bit off from "real-time" data,
+      // but I think the time margin of 1 minute can still be achieved
+      // in a real world scenario, this is more likely an independent listener
+      // and will receive the data piece by piece instead of putting them in a file
+      // then reading it like this
+      while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
+        TeqplayShipResponse response =
+            objectMapper.readValue(jsonParser, TeqplayShipResponse.class);
+        responseList.add(response);
+        var currentCount = counter.incrementAndGet();
+        if (currentCount >= 1999) {
+          // handle 2000 data at a time, with some margin for counting error
+          virtualThreadPerTaskExecutor.submit(() -> {
+            // to avoid concurrency shenanigans, since we would need to clear the holder
+            var copyList = List.copyOf(responseList);
+            copyList.forEach(this::processResponse);
+          });
+          responseList.clear();
+          counter.set(0);
+        }
+      }
+
+      // since we might miss out on the rest of the data
+      // if the end of the tokens are less than 2000
+      if (counter.get() != 0 && !responseList.isEmpty()) {
+        virtualThreadPerTaskExecutor.submit(() -> {
+          // to let the initial holder be garbage collected
+          var copyList = List.copyOf(responseList);
+          copyList.forEach(this::processResponse);
+        });
+      }
     } catch (IOException e) {
-      log.error("IOException during handlePollingData", e);
-      throw new BusinessException(e);
+      log.error("json processing error during handlePollingData", e);
+      throw new BusinessException("json processing error", e);
     }
 
     // finally, delete the temp file as the processing is done
@@ -91,8 +127,8 @@ public final class ShipDataService {
     // since in JDK 21, there's no "Gatherers" yet, and streams can't take advantage of Virtual
     // Threads
     // that's why we do it manually
+    log.info("start processing ship entry/exit port event");
     virtualThreadPerTaskExecutor.submit(() -> {
-      log.info("start processing ship entry/exit port event");
       // we need this to flag whether the ship is inside port or not when creating new data in DB
       var isResponseInsidePolygon = checkIfLocationInsidePort(teqplayShipResponse.getLocation());
 
@@ -133,6 +169,7 @@ public final class ShipDataService {
           .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
           .shipType(teqplayShipResponse.getShipType())
           .name(teqplayShipResponse.getName())
+          .isInPort(isResponseInsidePolygon)
           .build();
       shipRepository.save(shipEntity);
     });
@@ -155,8 +192,8 @@ public final class ShipDataService {
       Boolean isResponseInsidePolygon,
       ShipEntity shipEntity,
       TeqplayShipResponse teqplayShipResponse) {
-    log.info("start processing port event logic");
     if (Boolean.TRUE.equals(isShipInsidePolygon) && Boolean.FALSE.equals(isResponseInsidePolygon)) {
+      log.info("an entry event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // EXIT EVENT
       var portEvent = PortEventEntity.builder()
           .event(PortEvent.EXIT)
@@ -167,6 +204,7 @@ public final class ShipDataService {
       shipEntity.setIsInPort(false);
     } else if (Boolean.FALSE.equals(isShipInsidePolygon)
         && Boolean.TRUE.equals(isResponseInsidePolygon)) {
+      log.info("an exit event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // ENTRY EVENT
       var portEvent = PortEventEntity.builder()
           .event(PortEvent.ENTRY)

@@ -74,7 +74,7 @@ public final class TeqplayClient {
         .accept(MediaType.APPLICATION_JSON);
     log.info("Retrieving latest ship data");
     log.info("Authorization Token: {}", token);
-    
+
     var bytes = httpClient.toBlocking().retrieve(request, byte[].class);
     if (bytes == null || bytes.length == 0) {
       throw new BusinessException("No ship data was retrieved");

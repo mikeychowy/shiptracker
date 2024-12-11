@@ -2,10 +2,12 @@ package com.example.dto.response;
 
 import com.example.entity.LocationPart;
 import io.micronaut.core.annotation.Nullable;
+import io.micronaut.serde.annotation.Serdeable;
 import java.util.Map;
 import lombok.Data;
 
 @Data
+@Serdeable
 public final class TeqplayShipResponse {
 
   private String mmsi;

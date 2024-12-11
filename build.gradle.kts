@@ -35,10 +35,13 @@ dependencies {
     implementation("io.micronaut.objectstorage:micronaut-object-storage-local")
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.micronaut.reactor:micronaut-reactor-http-client")
-    implementation("io.micronaut.serde:micronaut-serde-bson")
+    implementation("io.micronaut:micronaut-jackson-databind")
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.session:micronaut-session")
     implementation("io.micronaut.validation:micronaut-validation")
     implementation("jakarta.validation:jakarta.validation-api")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.module:jackson-module-blackbird")
     implementation("org.apache.commons:commons-lang3:$commonsLangVersion")
     implementation("commons-io:commons-io:$commonsIOVersion")
     implementation("org.locationtech.jts:jts-core:$jtsVersion")
@@ -85,7 +88,7 @@ micronaut {
 
 spotless {
     kotlin {
-        target("**/*.kt")
+        target("src/**/*.kt")
         ktlint() // has its own section below
     }
     kotlinGradle {
