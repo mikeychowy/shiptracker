@@ -1,6 +1,8 @@
 package com.example.service;
 
 import com.example.constant.PortEvent;
+import com.example.dto.response.PortEventResponse;
+import com.example.dto.response.ShipResponse;
 import com.example.dto.response.TeqplayShipResponse;
 import com.example.entity.LocationPart;
 import com.example.entity.PortEventEntity;
@@ -193,10 +195,10 @@ public final class ShipDataService {
       ShipEntity shipEntity,
       TeqplayShipResponse teqplayShipResponse) {
     if (Boolean.TRUE.equals(isShipInsidePolygon) && Boolean.FALSE.equals(isResponseInsidePolygon)) {
-      log.info("an entry event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
+      log.info("an exit event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // EXIT EVENT
       var portEvent = PortEventEntity.builder()
-          .event(PortEvent.EXIT)
+          .event(PortEvent.EXIT.name())
           .ship(shipEntity)
           .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
           .build();
@@ -204,10 +206,10 @@ public final class ShipDataService {
       shipEntity.setIsInPort(false);
     } else if (Boolean.FALSE.equals(isShipInsidePolygon)
         && Boolean.TRUE.equals(isResponseInsidePolygon)) {
-      log.info("an exit event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
+      log.info("an entry event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // ENTRY EVENT
       var portEvent = PortEventEntity.builder()
-          .event(PortEvent.ENTRY)
+          .event(PortEvent.ENTRY.name())
           .ship(shipEntity)
           .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
           .build();
@@ -234,5 +236,43 @@ public final class ShipDataService {
 
   private void savePortEvent(PortEventEntity portEventEntity) {
     portEventRepository.save(portEventEntity);
+  }
+
+  public List<PortEventResponse> findPortEvents(@Nullable PortEvent portEvent) {
+    if (Objects.isNull(portEvent)) {
+      return portEventRepository.findAll().stream()
+          .filter(Objects::nonNull)
+          .map(entity -> new PortEventResponse(
+              entity.getShip().getMmsi(), entity.getEvent(), entity.getTimeLastUpdate()))
+          .toList();
+    }
+
+    return portEventRepository.findByEvent(portEvent.name()).stream()
+        .filter(Objects::nonNull)
+        .map(entity -> new PortEventResponse(
+            entity.getShip().getMmsi(), entity.getEvent(), entity.getTimeLastUpdate()))
+        .toList();
+  }
+
+  public List<ShipResponse> findAllShipsInPort() {
+    var ships = shipRepository.findByIsInPort(true);
+    return List.copyOf(ships).stream()
+        .map(ship -> ShipResponse.builder()
+            .mmsi(ship.getMmsi())
+            .timeLastUpdate(ship.getTimeLastUpdate())
+            .courseOverGround(ship.getCourseOverGround())
+            .speedOverGround(ship.getSpeedOverGround())
+            .destination(ship.getDestination())
+            .trueDestination(ship.getTrueDestination())
+            .callSign(ship.getCallSign())
+            .imoNumber(ship.getImoNumber())
+            .location(ship.getLocation())
+            .coms(ship.getComs())
+            .extras(ship.getExtras())
+            .status(ship.getStatus())
+            .shipType(ship.getShipType())
+            .isInPort(ship.getIsInPort())
+            .build())
+        .toList();
   }
 }
