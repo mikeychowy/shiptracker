@@ -24,14 +24,20 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.tuple.Pair;
+import org.eclipse.collections.impl.collector.Collectors2;
+import org.eclipse.collections.impl.tuple.Tuples;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Polygon;
@@ -73,44 +79,41 @@ public final class ShipDataService {
         throw new BusinessException("Unexpected token: " + jsonParser.getCurrentToken());
       }
 
-      // atomic counter for, well, counting, consume around 2000 data
+      // atomic counter for, well, counting
       AtomicInteger counter = new AtomicInteger(0);
       // initial holder
-      List<TeqplayShipResponse> responseList = new ArrayList<>();
+      MutableList<TeqplayShipResponse> responseList = Lists.mutable.of();
 
       // this is just to simulate a more sophisticated queue system like Kafka or NATS.IO
-      // since this doesn't have backpressure, retry, indexing/offsets
+      // since this doesn't have backpressure, retry, indexing or offsets
       // but the JSON is BIG (like my appetite 😋), so we need to use Jackson's streaming API
       // well, this makes it a bit off from "real-time" data,
       // but I think the time margin of 1 minute can still be achieved
       // in a real world scenario, this is more likely an independent listener
-      // and will receive the data piece by piece instead of putting them in a file
+      // and will receive the data piece(s) by piece(s) instead of putting them in a file
       // then reading it like this
       while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
         TeqplayShipResponse response =
             objectMapper.readValue(jsonParser, TeqplayShipResponse.class);
         responseList.add(response);
+
         var currentCount = counter.incrementAndGet();
-        if (currentCount >= 1999) {
-          // handle 2000 data at a time, with some margin for counting error
-          virtualThreadPerTaskExecutor.submit(() -> {
-            // to avoid concurrency shenanigans, since we would need to clear the holder
-            var copyList = List.copyOf(responseList);
-            copyList.forEach(this::processResponse);
-          });
+        if (currentCount >= 9999) {
+          responseList = responseList.select(Objects::nonNull);
+          // handle 10K data at a time, with some margin for counting error
+          // to avoid concurrency shenanigans, since we would need to clear the holder
+          // besides, this ensures immutability
+          processResponses(Lists.immutable.withAll(responseList));
           responseList.clear();
           counter.set(0);
         }
       }
 
       // since we might miss out on the rest of the data
-      // if the end of the tokens are less than 2000
+      // if the end of the tokens are less than 10K
       if (counter.get() != 0 && !responseList.isEmpty()) {
-        virtualThreadPerTaskExecutor.submit(() -> {
-          // to let the initial holder be garbage collected
-          var copyList = List.copyOf(responseList);
-          copyList.forEach(this::processResponse);
-        });
+        responseList = responseList.select(Objects::nonNull);
+        processResponses(Lists.immutable.withAll(responseList));
       }
     } catch (IOException e) {
       log.error("json processing error during handlePollingData", e);
@@ -123,61 +126,123 @@ public final class ShipDataService {
     } catch (IOException e) {
       log.error("Failed to delete temporary file: {}", tmpJsonFile.getAbsolutePath(), e);
     }
+
+    log.info("finished handling polling ship data");
   }
 
-  private void processResponse(TeqplayShipResponse teqplayShipResponse) {
-    // since in JDK 21, there's no "Gatherers" yet, and streams can't take advantage of Virtual
-    // Threads
-    // that's why we do it manually
-    log.info("start processing ship entry/exit port event");
+  private void processResponses(ImmutableList<TeqplayShipResponse> responses) {
     virtualThreadPerTaskExecutor.submit(() -> {
-      // we need this to flag whether the ship is inside port or not when creating new data in DB
-      var isResponseInsidePolygon = checkIfLocationInsidePort(teqplayShipResponse.getLocation());
+      ImmutableList<ShipEntity> shipsInDB =
+          Lists.immutable.withAll(shipRepository.findByMmsiInList(responses.stream()
+              .map(TeqplayShipResponse::getMmsi)
+              .filter(Objects::nonNull)
+              .collect(Collectors2.toList())));
 
-      var optionalShipEntity = shipRepository.findByMmsi(teqplayShipResponse.getMmsi());
-      if (optionalShipEntity.isPresent()) {
-        // check port event
-        var shipEntity = optionalShipEntity.get();
-        Instant responseUpdateTime = Instant.ofEpochMilli(teqplayShipResponse.getTimeLastUpdate());
-        Instant dbUpdateTime = Instant.ofEpochMilli(shipEntity.getTimeLastUpdate());
-        // only do the processing if the data from response is newer than DB
-        if (dbUpdateTime.isBefore(responseUpdateTime)) {
-          var isShipInsidePolygon =
-              // check from flag, if null, check from location
-              Optional.ofNullable(shipEntity.getIsInPort())
-                  .orElse(checkIfLocationInsidePort(shipEntity.getLocation()));
-          processPortEventLogic(
-              isShipInsidePolygon, isResponseInsidePolygon, shipEntity, teqplayShipResponse);
-        } else {
-          // do nothing as this is not the most updated data, don't even save it into DB
-          return;
-        }
-      }
+      // for ease of filtering, we need only the mmsi of the ships in DB (if any)
+      ImmutableList<String> shipsInDbMmsiList =
+          shipsInDB.stream().map(ShipEntity::getMmsi).collect(Collectors2.toImmutableList());
 
-      // save new ship response
-      var shipEntity = ShipEntity.builder()
-          .mmsi(teqplayShipResponse.getMmsi())
-          .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
-          .extras(teqplayShipResponse.getExtras())
-          .coms(teqplayShipResponse.getComs())
-          .courseOverGround(teqplayShipResponse.getCourseOverGround())
-          .speedOverGround(teqplayShipResponse.getSpeedOverGround())
-          .callSign(teqplayShipResponse.getCallSign())
-          .imoNumber(teqplayShipResponse.getImoNumber())
-          .destination(teqplayShipResponse.getDestination())
-          .trueDestination(teqplayShipResponse.getTrueDestination())
-          .location(teqplayShipResponse.getLocation())
-          .status(teqplayShipResponse.getStatus())
-          .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
-          .shipType(teqplayShipResponse.getShipType())
-          .name(teqplayShipResponse.getName())
-          .isInPort(isResponseInsidePolygon)
-          .build();
-      shipRepository.save(shipEntity);
+      processNewShipData(responses, shipsInDbMmsiList);
+
+      ImmutableList<Pair<ShipEntity, PortEventEntity>> shipUpdatePortEventPersistList = responses
+          .select(res -> shipsInDbMmsiList.contains(res.getMmsi()))
+          .collect(res -> {
+            var isResponseInsidePolygon = checkIfLocationInsidePort(res.getLocation());
+            var shipEntity = shipsInDB
+                .select(ship -> StringUtils.equalsIgnoreCase(res.getMmsi(), ship.getMmsi()))
+                .getOnly();
+            Instant responseUpdateTime = Instant.ofEpochMilli(res.getTimeLastUpdate());
+            Instant dbUpdateTime = Instant.ofEpochMilli(shipEntity.getTimeLastUpdate());
+
+            // only do the processing if the data from response is newer than DB
+            if (dbUpdateTime.isBefore(responseUpdateTime)) {
+              var isShipInsidePolygon =
+                  // check from flag, if null, check from location
+                  Optional.ofNullable(shipEntity.getIsInPort())
+                      .orElse(checkIfLocationInsidePort(shipEntity.getLocation()));
+              return processPortEventLogic(
+                  isShipInsidePolygon, isResponseInsidePolygon, shipEntity, res);
+            }
+            // do nothing as this is not the most updated data, don't even save it into DB
+            return null;
+          })
+          .select(Objects::nonNull);
+
+      processShipUpdatesAndPortEvents(shipUpdatePortEventPersistList);
     });
   }
 
-  private Boolean checkIfLocationInsidePort(@Nullable LocationPart location) {
+  private void processNewShipData(
+      ImmutableList<TeqplayShipResponse> responses, ImmutableList<String> shipsInDbMmsiList) {
+    // get the responses that needs persisting first (new ships)
+    ImmutableList<ShipEntity> responsesNeedPersisting = responses
+        .reject(res -> shipsInDbMmsiList.contains(res.getMmsi()))
+        .collect(res -> {
+          // we need this to flag whether the ship is inside port or not when creating new data
+          var isResponseInsidePolygon = checkIfLocationInsidePort(res.getLocation());
+          return ShipEntity.builder()
+              .id(res.getMmsi())
+              .mmsi(res.getMmsi())
+              .timeLastUpdate(res.getTimeLastUpdate())
+              .extras(res.getExtras())
+              .coms(res.getComs())
+              .courseOverGround(res.getCourseOverGround())
+              .speedOverGround(res.getSpeedOverGround())
+              .callSign(res.getCallSign())
+              .imoNumber(res.getImoNumber())
+              .destination(res.getDestination())
+              .trueDestination(res.getTrueDestination())
+              .location(res.getLocation())
+              .status(res.getStatus())
+              .timeLastUpdate(res.getTimeLastUpdate())
+              .shipType(res.getShipType())
+              .name(res.getName())
+              .isInPort(isResponseInsidePolygon)
+              .build();
+        });
+    try {
+      shipRepository.saveAll(responsesNeedPersisting);
+    } catch (Exception e) {
+      final String message = "failed to persist ships into DB";
+      log.error(message, e);
+      throw new BusinessException(message, e);
+    }
+  }
+
+  private void processShipUpdatesAndPortEvents(
+      ImmutableList<Pair<ShipEntity, PortEventEntity>> shipUpdatePortEventPersistList) {
+    if (!shipUpdatePortEventPersistList.isEmpty()) {
+      // get only the ship updates
+      var shipUpdates =
+          shipUpdatePortEventPersistList.collect(Pair::getOne).select(Objects::nonNull);
+      if (!shipUpdates.isEmpty()) {
+        // bulk update them
+        try {
+          shipRepository.updateAll(shipUpdates);
+        } catch (Exception e) {
+          final String message = "failed to update ships into DB";
+          log.error(message, e);
+          throw new BusinessException(message, e);
+        }
+      }
+
+      // get the port events
+      var portEvents =
+          shipUpdatePortEventPersistList.collect(Pair::getTwo).select(Objects::nonNull);
+      if (!portEvents.isEmpty()) {
+        // bulk persist them
+        try {
+          portEventRepository.saveAll(portEvents);
+        } catch (Exception e) {
+          final String message = "failed to port events into DB";
+          log.error(message, e);
+          throw new BusinessException(message, e);
+        }
+      }
+    }
+  }
+
+  @Nullable private Boolean checkIfLocationInsidePort(@Nullable LocationPart location) {
     if (Objects.nonNull(location) && StringUtils.equalsIgnoreCase("point", location.getType())) {
       var coordinatesList = Optional.ofNullable(location.getCoordinates()).orElse(List.of());
       if (coordinatesList.size() == 2) {
@@ -186,38 +251,38 @@ public final class ShipDataService {
         return rotterdamPortPolygon.contains(point);
       }
     }
-    return false;
+    return null;
   }
 
-  private void processPortEventLogic(
+  private Pair<ShipEntity, PortEventEntity> processPortEventLogic(
       Boolean isShipInsidePolygon,
       Boolean isResponseInsidePolygon,
       ShipEntity shipEntity,
       TeqplayShipResponse teqplayShipResponse) {
+    PortEventEntity portEvent = null;
     if (Boolean.TRUE.equals(isShipInsidePolygon) && Boolean.FALSE.equals(isResponseInsidePolygon)) {
       log.info("an exit event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // EXIT EVENT
-      var portEvent = PortEventEntity.builder()
+      portEvent = PortEventEntity.builder()
+          .id(UUID.randomUUID().toString())
           .event(PortEvent.EXIT.name())
-          .ship(shipEntity)
           .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
           .build();
-      savePortEvent(portEvent);
       shipEntity.setIsInPort(false);
     } else if (Boolean.FALSE.equals(isShipInsidePolygon)
         && Boolean.TRUE.equals(isResponseInsidePolygon)) {
       log.info("an entry event has occurred for ship with mmsi: {}", shipEntity.getMmsi());
       // ENTRY EVENT
-      var portEvent = PortEventEntity.builder()
+      portEvent = PortEventEntity.builder()
+          .id(UUID.randomUUID().toString())
           .event(PortEvent.ENTRY.name())
-          .ship(shipEntity)
           .timeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
           .build();
-      savePortEvent(portEvent);
       shipEntity.setIsInPort(true);
     }
-    // finally, regardless if a port event occurs or not, update the data
+    // regardless if a port event occurs or not, update the data
     shipEntity
+        .setId(shipEntity.getMmsi())
         .setExtras(teqplayShipResponse.getExtras())
         .setComs(teqplayShipResponse.getComs())
         .setCourseOverGround(teqplayShipResponse.getCourseOverGround())
@@ -231,11 +296,12 @@ public final class ShipDataService {
         .setTimeLastUpdate(teqplayShipResponse.getTimeLastUpdate())
         .setShipType(teqplayShipResponse.getShipType())
         .setName(teqplayShipResponse.getName());
-    shipRepository.update(shipEntity);
-  }
 
-  private void savePortEvent(PortEventEntity portEventEntity) {
-    portEventRepository.save(portEventEntity);
+    if (Objects.nonNull(portEvent)) {
+      portEvent.setShip(shipEntity);
+    }
+
+    return Tuples.pair(shipEntity, portEvent);
   }
 
   public List<PortEventResponse> findPortEvents(@Nullable PortEvent portEvent) {
@@ -243,36 +309,42 @@ public final class ShipDataService {
       return portEventRepository.findAll().stream()
           .filter(Objects::nonNull)
           .map(entity -> new PortEventResponse(
-              entity.getShip().getMmsi(), entity.getEvent(), entity.getTimeLastUpdate()))
+              this.mapShipEntityToResponse(entity.getShip()),
+              entity.getEvent(),
+              entity.getTimeLastUpdate()))
           .toList();
     }
 
     return portEventRepository.findByEvent(portEvent.name()).stream()
         .filter(Objects::nonNull)
         .map(entity -> new PortEventResponse(
-            entity.getShip().getMmsi(), entity.getEvent(), entity.getTimeLastUpdate()))
+            this.mapShipEntityToResponse(entity.getShip()),
+            entity.getEvent(),
+            entity.getTimeLastUpdate()))
         .toList();
   }
 
   public List<ShipResponse> findAllShipsInPort() {
     var ships = shipRepository.findByIsInPort(true);
-    return List.copyOf(ships).stream()
-        .map(ship -> ShipResponse.builder()
-            .mmsi(ship.getMmsi())
-            .timeLastUpdate(ship.getTimeLastUpdate())
-            .courseOverGround(ship.getCourseOverGround())
-            .speedOverGround(ship.getSpeedOverGround())
-            .destination(ship.getDestination())
-            .trueDestination(ship.getTrueDestination())
-            .callSign(ship.getCallSign())
-            .imoNumber(ship.getImoNumber())
-            .location(ship.getLocation())
-            .coms(ship.getComs())
-            .extras(ship.getExtras())
-            .status(ship.getStatus())
-            .shipType(ship.getShipType())
-            .isInPort(ship.getIsInPort())
-            .build())
-        .toList();
+    return List.copyOf(ships).stream().map(this::mapShipEntityToResponse).toList();
+  }
+
+  private ShipResponse mapShipEntityToResponse(@Nonnull ShipEntity ship) {
+    return ShipResponse.builder()
+        .mmsi(ship.getMmsi())
+        .timeLastUpdate(ship.getTimeLastUpdate())
+        .courseOverGround(ship.getCourseOverGround())
+        .speedOverGround(ship.getSpeedOverGround())
+        .destination(ship.getDestination())
+        .trueDestination(ship.getTrueDestination())
+        .callSign(ship.getCallSign())
+        .imoNumber(ship.getImoNumber())
+        .location(ship.getLocation())
+        .coms(ship.getComs())
+        .extras(ship.getExtras())
+        .status(ship.getStatus())
+        .shipType(ship.getShipType())
+        .isInPort(ship.getIsInPort())
+        .build();
   }
 }

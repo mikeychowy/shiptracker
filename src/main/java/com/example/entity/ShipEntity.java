@@ -1,12 +1,11 @@
 package com.example.entity;
 
+import io.micronaut.core.annotation.NonNull;
 import io.micronaut.core.annotation.Nullable;
-import io.micronaut.data.annotation.GeneratedValue;
 import io.micronaut.data.annotation.Id;
 import io.micronaut.data.annotation.MappedEntity;
 import io.micronaut.data.annotation.Relation;
 import io.micronaut.data.annotation.Version;
-import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -15,7 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
-import org.bson.types.ObjectId;
 
 @Getter
 @Setter
@@ -27,12 +25,11 @@ import org.bson.types.ObjectId;
 public class ShipEntity {
 
   @Id
-  @GeneratedValue
-  private ObjectId id;
+  @NonNull private String id;
 
-  @NotNull private String mmsi;
+  @NonNull private String mmsi;
 
-  @NotNull private Long timeLastUpdate;
+  @NonNull private Long timeLastUpdate;
 
   @Nullable private Double courseOverGround;
 

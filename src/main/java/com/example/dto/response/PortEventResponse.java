@@ -5,4 +5,4 @@ import io.micronaut.serde.annotation.Serdeable;
 
 @Serdeable
 @Introspected
-public record PortEventResponse(String mmsi, String event, Long timeLastUpdate) {}
+public record PortEventResponse(ShipResponse ship, String event, Long timeOfEvent) {}

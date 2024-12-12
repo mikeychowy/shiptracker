@@ -17,6 +17,7 @@ val awaitilityVersion = "4.2.2"
 val commonsLangVersion = "3.17.0"
 val commonsIOVersion = "2.18.0"
 val jtsVersion = "1.20.0"
+val eclipseCollectionsVersion = "11.1.0"
 
 dependencies {
     annotationProcessor("org.projectlombok:lombok")
@@ -42,9 +43,12 @@ dependencies {
     implementation("jakarta.validation:jakarta.validation-api")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("com.fasterxml.jackson.module:jackson-module-blackbird")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-eclipse-collections")
     implementation("org.apache.commons:commons-lang3:$commonsLangVersion")
     implementation("commons-io:commons-io:$commonsIOVersion")
     implementation("org.locationtech.jts:jts-core:$jtsVersion")
+    implementation("org.eclipse.collections:eclipse-collections-api:$eclipseCollectionsVersion")
+    implementation("org.eclipse.collections:eclipse-collections:$eclipseCollectionsVersion")
     compileOnly("org.projectlombok:lombok")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.mongodb:mongodb-driver-sync")

@@ -1,7 +1,6 @@
 package com.example.entity;
 
 import io.micronaut.core.annotation.NonNull;
-import io.micronaut.data.annotation.GeneratedValue;
 import io.micronaut.data.annotation.Id;
 import io.micronaut.data.annotation.MappedEntity;
 import io.micronaut.data.annotation.Relation;
@@ -12,7 +11,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.bson.types.ObjectId;
 
 @Getter
 @Setter
@@ -23,11 +21,10 @@ import org.bson.types.ObjectId;
 public class PortEventEntity {
 
   @Id
-  @GeneratedValue
-  private ObjectId id;
+  private String id;
 
-  @Relation(value = Relation.Kind.MANY_TO_ONE, cascade = Relation.Cascade.PERSIST)
-  @JoinColumn(name = "mmsi")
+  @JoinColumn(name = "shipId", referencedColumnName = "mmsi")
+  @Relation(value = Relation.Kind.MANY_TO_ONE, cascade = Relation.Cascade.NONE)
   @NonNull private ShipEntity ship;
 
   @NonNull private String event;
